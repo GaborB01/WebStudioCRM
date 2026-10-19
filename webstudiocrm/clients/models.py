@@ -4,9 +4,6 @@ from django.db import models
 class Client(models.Model):
     STATUS_CHOICES = [
         ("inquiry", "Inquiry"),
-        ("consultation", "Consultation"),
-        ("proposal", "Proposal Sent"),
-        ("contracting", "Contracting"),
         ("active", "Active"),
         ("ghosted", "Ghosted"),
         ("inactive", "Inactive"),
