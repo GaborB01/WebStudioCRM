@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Project
+from tasks.admin import TaskInline
 
 
 @admin.register(Project)
@@ -21,6 +22,7 @@ class ProjectAdmin(admin.ModelAdmin):
     )
     search_fields = ("name", "client__name", "description")
     autocomplete_fields = ["client", "primary_contact"]
+    inlines = [TaskInline]
 
     fieldsets = (
         (
@@ -30,12 +32,5 @@ class ProjectAdmin(admin.ModelAdmin):
         (
             "Sales & Production Status",
             {"fields": ("status", "project_type", "price", "start_date", "deadline")},
-        ),
-        (
-            "Maintenance Contract",
-            {
-                "fields": ("has_maintenance",),
-                "classes": ("collapse",),
-            },
         ),
     )
