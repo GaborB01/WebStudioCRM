@@ -1,9 +1,26 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet
 from .models import Client, Contact
+
+
+class ContactInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        primary_count = sum(
+            1
+            for form in self.forms
+            if form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("is_primary")
+        )
+        if primary_count > 1:
+            raise ValidationError("Only one contact can be marked as primary.")
 
 
 class ContactInline(admin.TabularInline):
     model = Contact
+    formset = ContactInlineFormSet
     extra = 1
 
 

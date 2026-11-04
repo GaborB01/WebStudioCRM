@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from clients.models import Client, Contact
 
@@ -73,3 +74,14 @@ class Project(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.client.name}"
+
+    def clean(self):
+        super().clean()
+        if (
+            self.primary_contact_id
+            and self.client_id
+            and self.primary_contact.client_id != self.client_id
+        ):
+            raise ValidationError(
+                {"primary_contact": "This contact does not belong to the selected client."}
+            )

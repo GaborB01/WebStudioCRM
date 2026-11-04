@@ -47,7 +47,7 @@ class Client(models.Model):
 class Contact(models.Model):
     client = models.ForeignKey(
         Client,
-        on_delete=models.Case,
+        on_delete=models.CASCADE,
         related_name="contacts",
         verbose_name="Client",
     )
@@ -61,12 +61,20 @@ class Contact(models.Model):
     )
     email = models.EmailField("Email Address")
     phone = models.CharField("Phone Number", max_length=30, blank=True)
-    is_primary = models.BooleanField("Primary Contact", default=True)
+    is_primary = models.BooleanField("Primary Contact", default=False)
     notes = models.TextField("Notes", blank=True)
 
     class Meta:
         verbose_name = "Contact"
         verbose_name_plural = "Contacts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client"],
+                condition=models.Q(is_primary=True),
+                name="unique_primary_contact_per_client",
+                violation_error_message="This client already has a primary contact.",
+            )
+        ]
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.client.name})"
