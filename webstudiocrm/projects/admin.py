@@ -1,10 +1,11 @@
 from django.contrib import admin
 from .models import Project
+from clients.admin import ClientFilteredAutocompleteMedia, ClientFilteredAutocompleteMixin
 from tasks.admin import TaskInline
 
 
 @admin.register(Project)
-class ProjectAdmin(admin.ModelAdmin):
+class ProjectAdmin(ClientFilteredAutocompleteMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "client",
@@ -23,6 +24,7 @@ class ProjectAdmin(admin.ModelAdmin):
     search_fields = ("name", "client__name", "description")
     autocomplete_fields = ["client", "primary_contact"]
     inlines = [TaskInline]
+    Media = ClientFilteredAutocompleteMedia
 
     fieldsets = (
         (

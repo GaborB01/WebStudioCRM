@@ -85,3 +85,8 @@ class Project(models.Model):
             raise ValidationError(
                 {"primary_contact": "This contact does not belong to the selected client."}
             )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Keep the project's tasks on the same client if the client changes
+        self.tasks.exclude(client=self.client).update(client=self.client)

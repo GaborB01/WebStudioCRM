@@ -67,6 +67,7 @@ class Contact(models.Model):
     class Meta:
         verbose_name = "Contact"
         verbose_name_plural = "Contacts"
+        ordering = ["last_name", "first_name"]
         constraints = [
             models.UniqueConstraint(
                 fields=["client"],
