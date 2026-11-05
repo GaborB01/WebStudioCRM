@@ -13,6 +13,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # apps
+    "core",
     "clients",
     "projects",
     "tasks",
@@ -49,7 +50,7 @@ WSGI_APPLICATION = "webstudiocrm.wsgi.application"
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Europe/Budapest"
 
 USE_I18N = True
 
@@ -60,3 +61,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+# Uploaded files (logos, generated PDFs)
+# BASE_DIR is the inner webstudiocrm/ package, so go one level up to keep
+# uploads next to manage.py instead of inside the Python package.
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR.parent / "media"
