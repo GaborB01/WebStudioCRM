@@ -6,7 +6,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
-from .choices import Currency
+from .choices import Currency, VatTreatment
 from .models import DocumentSequence, StudioBankAccount, StudioProfile, VatRate
 
 
@@ -53,14 +53,36 @@ class VatRateTests(TestCase):
         default = VatRate.get_default()
 
         self.assertEqual(default.rate, Decimal("27.00"))
-        self.assertTrue(VatRate.objects.filter(is_reverse_charge=True).exists())
+        self.assertTrue(VatRate.objects.get(name="EU reverse charge").is_reverse_charge)
+        self.assertEqual(
+            VatRate.objects.get(name="Outside the EU").treatment, VatTreatment.OUTSIDE_EU
+        )
+
+    def test_suggested_rate_per_treatment(self):
+        self.assertEqual(VatRate.suggested_for(VatTreatment.STANDARD).rate, Decimal("27"))
+        self.assertEqual(
+            VatRate.suggested_for(VatTreatment.EU_REVERSE_CHARGE).name, "EU reverse charge"
+        )
+        self.assertEqual(VatRate.suggested_for(VatTreatment.OUTSIDE_EU).name, "Outside the EU")
+
+    def test_default_rate_must_be_hungarian_vat(self):
+        rate = VatRate.objects.get(name="Outside the EU")
+        VatRate.objects.filter(is_default=True).update(is_default=False)
+        rate.is_default = True
+
+        with self.assertRaises(ValidationError) as ctx:
+            rate.full_clean()
+
+        self.assertIn("is_default", ctx.exception.message_dict)
 
     def test_only_one_default_rate(self):
         with self.assertRaises(IntegrityError):
             VatRate.objects.create(name="Reduced", rate=Decimal("5"), is_default=True)
 
     def test_reverse_charge_must_be_zero_percent_with_notes(self):
-        rate = VatRate(name="Bad", rate=Decimal("27"), is_reverse_charge=True)
+        rate = VatRate(
+            name="Bad", rate=Decimal("27"), treatment=VatTreatment.EU_REVERSE_CHARGE
+        )
 
         with self.assertRaises(ValidationError) as ctx:
             rate.full_clean()
