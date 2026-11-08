@@ -1,4 +1,14 @@
+import re
+
+from django.core.exceptions import ValidationError
 from django.db import models
+from django_countries.fields import CountryField
+
+from core.choices import EU_COUNTRIES, HOME_COUNTRY, VatTreatment
+
+# EU VAT numbers start with the country code; Greece uses EL instead of GR
+EU_VAT_PREFIXES = {"GR": "EL"}
+EU_VAT_NUMBER_PATTERN = re.compile(r"^[A-Z]{2}[0-9A-Z+*]{2,12}$")
 
 
 class Client(models.Model):
@@ -18,7 +28,14 @@ class Client(models.Model):
 
     name = models.CharField("Company Name", max_length=255)
     tax_number = models.CharField("Tax / VAT Number", max_length=50, blank=True)
+    eu_vat_number = models.CharField(
+        "EU VAT Number",
+        max_length=20,
+        blank=True,
+        help_text="With country prefix, e.g. DE123456789. Needed for EU reverse charge.",
+    )
     address = models.TextField("Billing Address", blank=True)
+    country = CountryField("Country", default=HOME_COUNTRY)
     website = models.URLField("Website", blank=True)
 
     status = models.CharField(
@@ -42,6 +59,40 @@ class Client(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        self.eu_vat_number = self.eu_vat_number.replace(" ", "").upper()
+        if not self.eu_vat_number:
+            return
+        if self.country.code not in EU_COUNTRIES:
+            raise ValidationError(
+                {"eu_vat_number": "Only clients in the EU have an EU VAT number."}
+            )
+        prefix = EU_VAT_PREFIXES.get(self.country.code, self.country.code)
+        if not (
+            EU_VAT_NUMBER_PATTERN.match(self.eu_vat_number)
+            and self.eu_vat_number.startswith(prefix)
+        ):
+            raise ValidationError(
+                {"eu_vat_number": f"Must start with {prefix}, e.g. {prefix}12345678."}
+            )
+
+    @property
+    def vat_treatment(self):
+        """Which VAT applies when the studio bills this client.
+
+        EU clients without an EU VAT number (consumers, unregistered
+        businesses) are charged Hungarian VAT.
+        """
+        code = self.country.code
+        if code == HOME_COUNTRY:
+            return VatTreatment.STANDARD
+        if code in EU_COUNTRIES:
+            if self.eu_vat_number:
+                return VatTreatment.EU_REVERSE_CHARGE
+            return VatTreatment.STANDARD
+        return VatTreatment.OUTSIDE_EU
 
 
 class Contact(models.Model):
