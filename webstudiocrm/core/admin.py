@@ -68,8 +68,8 @@ class StudioProfileAdmin(SingletonModelAdmin):
 
 @admin.register(VatRate)
 class VatRateAdmin(admin.ModelAdmin):
-    list_display = ("name", "rate", "is_reverse_charge", "is_default", "is_active")
-    list_filter = ("is_reverse_charge", "is_active")
+    list_display = ("name", "rate", "treatment", "is_default", "is_active")
+    list_filter = ("treatment", "is_active")
     search_fields = ("name",)
 
 
