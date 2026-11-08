@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 from clients.models import Client, Contact
+from core.choices import Currency
 
 
 class Project(models.Model):
@@ -54,11 +55,24 @@ class Project(models.Model):
     )
 
     price = models.DecimalField(
-        "Project Price",
+        "Project Price (net)",
         max_digits=12,
         decimal_places=2,
         null=True,
         blank=True,
+    )
+    price_currency = models.CharField(
+        "Currency", max_length=3, choices=Currency, default=Currency.HUF
+    )
+    price_quote = models.ForeignKey(
+        # String reference: quotes imports projects, so no import here
+        "quotes.Quote",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name="Price From Quote",
+        help_text="Set automatically when a quote is accepted.",
     )
 
     start_date = models.DateField("Start Date", null=True, blank=True)
@@ -74,6 +88,15 @@ class Project(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.client.name}"
+
+    @property
+    def price_display(self):
+        if self.price is None:
+            return ""
+        text = f"{self.price:,.2f} {self.price_currency}"
+        if self.price_quote_id:
+            text += f" ({self.price_quote.number})"
+        return text
 
     def clean(self):
         super().clean()
