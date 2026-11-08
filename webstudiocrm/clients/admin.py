@@ -51,9 +51,20 @@ class ContactInline(admin.TabularInline):
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ("name", "status", "company_type", "created_at")
-    list_filter = ("status", "company_type")
-    search_fields = ("name", "tax_number")
+    list_display = ("name", "country", "status", "company_type", "created_at")
+    list_filter = ("status", "company_type", "country")
+    search_fields = ("name", "tax_number", "eu_vat_number")
+    fields = (
+        "name",
+        "status",
+        "company_type",
+        "country",
+        "address",
+        "tax_number",
+        "eu_vat_number",
+        "website",
+        "notes",
+    )
     inlines = [ContactInline]
 
 
