@@ -1,0 +1,51 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+  {% with q=quote_obj %}
+  {% if q %}
+    <li><a href="{% url 'admin:quotes_quote_preview' q.pk %}" target="_blank">Preview PDF</a></li>
+    {% if q.pdf %}<li><a href="{% url 'admin:quotes_quote_pdf' q.pk %}">Download PDF</a></li>{% endif %}
+  {% endif %}
+  {% endwith %}
+  {{ block.super }}
+{% endblock %}
+
+{% block form_top %}
+  {% with q=quote_obj %}
+  {% if q %}
+  <div class="module" style="padding: 10px 12px; margin-bottom: 16px;">
+    <strong>Status: {{ q.get_status_display }}</strong>
+    {% if q.status == "draft" %}
+      {% if send_problems %}
+        <ul class="errorlist" style="margin-top: 6px;">
+          {% for problem in send_problems %}<li>{{ problem }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <p class="help" style="margin: 6px 0;">Save your changes first; the buttons act on the saved quote.</p>
+      <button type="submit" form="quote-send" class="button default" {% if send_problems %}disabled{% endif %}>Send quote</button>
+    {% elif q.status == "sent" %}
+      <button type="submit" form="quote-accept" class="button default">Mark accepted</button>
+      <button type="submit" form="quote-reject" class="button">Mark rejected</button>
+      <button type="submit" form="quote-revise" class="button">Create new version</button>
+    {% elif q.status == "rejected" or q.status == "expired" %}
+      <button type="submit" form="quote-revise" class="button">Create new version</button>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endwith %}
+  {{ block.super }}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+  {% if quote_obj %}
+    {# Separate forms (outside the main form) so buttons don't submit the edit form #}
+    <form id="quote-send" method="post" action="{% url 'admin:quotes_quote_workflow' quote_obj.pk 'send' %}">{% csrf_token %}</form>
+    <form id="quote-accept" method="post" action="{% url 'admin:quotes_quote_workflow' quote_obj.pk 'accept' %}">{% csrf_token %}</form>
+    <form id="quote-reject" method="post" action="{% url 'admin:quotes_quote_workflow' quote_obj.pk 'reject' %}"
+          onsubmit="var r = prompt('Rejection reason (optional):', ''); if (r === null) return false; this.reason.value = r;">
+      {% csrf_token %}<input type="hidden" name="reason">
+    </form>
+    <form id="quote-revise" method="post" action="{% url 'admin:quotes_quote_workflow' quote_obj.pk 'revise' %}">{% csrf_token %}</form>
+  {% endif %}
+{% endblock %}

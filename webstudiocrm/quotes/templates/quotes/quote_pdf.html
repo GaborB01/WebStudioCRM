@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+<meta charset="utf-8">
+<title>{{ t.quote }} {{ quote.reference }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 22mm;
+    @bottom-center {
+      content: "{{ seller.company_name }} · {{ quote.reference }} · " counter(page) " / " counter(pages);
+      font-family: "DejaVu Sans", "Helvetica", sans-serif; font-size: 7.5pt; color: #888;
+    }
+  }
+  body { font-family: "DejaVu Sans", "Helvetica", sans-serif; font-size: 9pt; color: #222; line-height: 1.4; }
+  h1 { font-size: 20pt; margin: 0 0 2mm; letter-spacing: .5pt; }
+  h2 { font-size: 10pt; margin: 7mm 0 2mm; text-transform: uppercase; color: #555; letter-spacing: .5pt; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .logo { max-height: 18mm; max-width: 60mm; }
+  .meta td { padding: 0 0 0 4mm; }
+  .meta td:first-child { color: #666; padding-left: 0; }
+  .parties { display: flex; gap: 10mm; margin-top: 8mm; }
+  .party { flex: 1; border-top: 1.5pt solid #222; padding-top: 2mm; }
+  .party .label { font-size: 7.5pt; text-transform: uppercase; color: #666; }
+  .party .name { font-weight: bold; font-size: 10.5pt; }
+  .muted { color: #666; }
+  /* Fixed column widths so all item tables line up */
+  table.items { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.items col.qty { width: 17mm; }
+  table.items col.price { width: 24mm; }
+  table.items col.disc { width: 13mm; }
+  table.items col.vat { width: 11mm; }
+  table.items col.net { width: 27mm; }
+  table.items th { text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #666;
+                   border-bottom: 1pt solid #222; padding: 1.5mm 1.5mm; }
+  table.items td { border-bottom: .5pt solid #ddd; padding: 1.8mm 1.5mm; vertical-align: top; }
+  table.items .num { text-align: right; white-space: nowrap; }
+  table.items .desc-extra { color: #666; font-size: 8pt; }
+  table.totals { margin-left: auto; margin-top: 4mm; border-collapse: collapse; min-width: 75mm; }
+  table.totals td { padding: 1mm 1.5mm; }
+  table.totals td.num { text-align: right; white-space: nowrap; }
+  table.totals tr.grand td { border-top: 1.5pt solid #222; font-weight: bold; font-size: 11pt; padding-top: 2mm; }
+  .notes { margin-top: 6mm; font-size: 8pt; }
+  .terms { white-space: pre-line; }
+  .draft-mark { position: fixed; top: 110mm; left: 0; right: 0; text-align: center;
+                font-size: 70pt; color: rgba(200, 0, 0, .12); transform: rotate(-30deg); }
+</style>
+</head>
+<body>
+{% if is_draft %}<div class="draft-mark">{{ t.draft }}</div>{% endif %}
+
+<div class="header">
+  <div>
+    {% if logo_uri %}<img class="logo" src="{{ logo_uri }}" alt="">{% endif %}
+    <h1>{{ t.quote }}</h1>
+    {% if quote.title %}<div>{{ quote.title }}</div>{% endif %}
+  </div>
+  <table class="meta">
+    <tr><td>{{ t.number }}</td><td><strong>{{ quote.reference }}</strong></td></tr>
+    {% if quote.version > 1 %}<tr><td>{{ t.version }}</td><td>{{ quote.version }}</td></tr>{% endif %}
+    {% if issue_date %}<tr><td>{{ t.issue_date }}</td><td>{{ issue_date }}</td></tr>{% endif %}
+    {% if valid_until %}<tr><td>{{ t.valid_until }}</td><td>{{ valid_until }}</td></tr>{% endif %}
+    <tr><td>{{ t.payment_terms }}</td><td>{{ quote.payment_terms_days }} {{ t.days }}</td></tr>
+  </table>
+</div>
+
+<div class="parties">
+  <div class="party">
+    <div class="label">{{ t.from }}</div>
+    <div class="name">{{ seller.company_name }}</div>
+    <div>{{ seller.address|linebreaksbr }}</div>
+    {% if seller.tax_number %}<div class="muted">{{ t.tax_number }}: {{ seller.tax_number }}</div>{% endif %}
+    {% if seller.eu_vat_number %}<div class="muted">{{ t.eu_vat_number }}: {{ seller.eu_vat_number }}</div>{% endif %}
+    {% if seller.registration_number %}<div class="muted">{{ t.registration_number }}: {{ seller.registration_number }}</div>{% endif %}
+    <div class="muted">{{ seller.email }}{% if seller.phone %} · {{ seller.phone }}{% endif %}</div>
+  </div>
+  <div class="party">
+    <div class="label">{{ t.to }}</div>
+    <div class="name">{{ client.name }}</div>
+    <div>{{ client.address|linebreaksbr }}</div>
+    {% if client.country != "HU" %}<div>{{ client.country_name }}</div>{% endif %}
+    {% if client.tax_number %}<div class="muted">{{ t.tax_number }}: {{ client.tax_number }}</div>{% endif %}
+    {% if client.eu_vat_number %}<div class="muted">{{ t.eu_vat_number }}: {{ client.eu_vat_number }}</div>{% endif %}
+    {% if client.contact_name %}<div class="muted">{{ t.attention }}: {{ client.contact_name }}</div>{% endif %}
+  </div>
+</div>
+
+{% if quote.intro_text %}<p style="margin-top: 7mm">{{ quote.intro_text|linebreaksbr }}</p>{% endif %}
+
+{% if rows.one_off %}
+<h2>{{ t.one_off }}</h2>
+{% include "quotes/_item_table.html" with items=rows.one_off %}
+<table class="totals">
+  {% if quote.discount_amount %}
+  <tr><td>{{ t.subtotal }}</td><td class="num">{{ subtotal }}</td></tr>
+  <tr><td>{{ t.quote_discount }} ({{ discount_percent }}%)</td><td class="num">−{{ discount_amount }}</td></tr>
+  {% endif %}
+  <tr><td>{{ t.net_total }}</td><td class="num">{{ net_total }}</td></tr>
+  {% for vat in vat_lines %}<tr><td>{{ vat.label }}</td><td class="num">{{ vat.amount }}</td></tr>{% endfor %}
+  <tr class="grand"><td>{{ t.gross_total }}</td><td class="num">{{ gross_total }}</td></tr>
+</table>
+{% endif %}
+
+{% if rows.recurring %}
+<h2>{{ t.recurring }}</h2>
+{% include "quotes/_item_table.html" with items=rows.recurring %}
+<table class="totals">
+  {% if monthly %}<tr><td>{{ t.per_month }}</td><td class="num"><strong>{{ monthly }}</strong> <span class="muted">({{ t.plus_vat }})</span></td></tr>{% endif %}
+  {% if yearly %}<tr><td>{{ t.per_year }}</td><td class="num"><strong>{{ yearly }}</strong> <span class="muted">({{ t.plus_vat }})</span></td></tr>{% endif %}
+</table>
+{% endif %}
+
+{% if rows.optional %}
+<h2>{{ t.optional }}</h2>
+{% include "quotes/_item_table.html" with items=rows.optional %}
+{% endif %}
+
+<div class="notes">
+  {% for note in vat_notes %}<p><strong>{{ note }}</strong></p>{% endfor %}
+
+  {% if seller.bank %}
+  <h2>{{ t.bank }}</h2>
+  <div>{{ seller.bank.bank_name }}</div>
+  {% if seller.bank.account_number %}<div>{{ t.account_number }}: {{ seller.bank.account_number }}</div>{% endif %}
+  {% if seller.bank.iban %}<div>IBAN: {{ seller.bank.iban }}</div>{% endif %}
+  {% if seller.bank.swift_bic %}<div>SWIFT/BIC: {{ seller.bank.swift_bic }}</div>{% endif %}
+  {% endif %}
+
+  {% if quote.terms_text %}
+  <h2>{{ t.terms }}</h2>
+  <div class="terms">{{ quote.terms_text }}</div>
+  {% endif %}
+</div>
+</body>
+</html>

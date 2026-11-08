@@ -1,0 +1,28 @@
+<table class="items">
+  <colgroup><col><col class="qty"><col class="price"><col class="disc"><col class="vat"><col class="net"></colgroup>
+  <thead>
+    <tr>
+      <th>{{ t.description }}</th>
+      <th class="num">{{ t.quantity }}</th>
+      <th class="num">{{ t.unit_price }}</th>
+      <th class="num">{{ t.discount }}</th>
+      <th class="num">{{ t.vat }}</th>
+      <th class="num">{{ t.net }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td>
+        {{ item.description_lines.0 }}
+        {% for line in item.description_lines|slice:"1:" %}<div class="desc-extra">{{ line }}</div>{% endfor %}
+      </td>
+      <td class="num">{{ item.quantity }} {{ item.unit }}</td>
+      <td class="num">{{ item.unit_price }}</td>
+      <td class="num">{{ item.discount }}</td>
+      <td class="num">{{ item.vat }}</td>
+      <td class="num">{{ item.net }}{% if item.per %}<div class="desc-extra">{{ item.per }}</div>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
