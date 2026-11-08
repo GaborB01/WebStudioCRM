@@ -7,6 +7,7 @@ A custom, admin-centric CRM system built with Django, specifically tailored for 
 - **Client & Contact Management**: Master data tracking for companies (SMBs, Startups, Agencies) with associated primary contacts.
 - **Project Pipeline**: Full sales and production tracking from initial inquiry to completion.
 - **Task Management**: Granular to-dos with priorities, deadlines, and statuses
+- **Quoting**: Line-item quotes with a service catalog, mixed VAT rates (incl. EU reverse charge), HUF/EUR/USD, yearly numbering (`Q-2026-0001`), versioning and English/Hungarian PDFs
 - **Django Admin First**: Optimized with `autocomplete_fields`, `list_editable`, and custom filters
 
 ## Tech Stack
@@ -14,6 +15,7 @@ A custom, admin-centric CRM system built with Django, specifically tailored for 
 - **Backend**: Python, Django 6.0.4
 - **Package Management**: `uv`
 - **Database**: SQLite (Development) / PostgreSQL (Production ready)
+- **PDF**: WeasyPrint (needs the Pango system library, e.g. `apt install libpango-1.0-0 libpangoft2-1.0-0`)
 
 ## Getting Started
 
@@ -30,4 +32,9 @@ A custom, admin-centric CRM system built with Django, specifically tailored for 
 5. Run the development server:
     ```bash
     python manage.py runserver --settings=webstudiocrm.settings.dev
+    ```
+6. Fill in your company details, bank accounts and quote terms in **Admin → Core → Studio Profile**, then add your rates in **Quotes → Service Items**.
+7. Schedule the daily quote expiry job (e.g. cron):
+    ```bash
+    python manage.py expire_quotes --settings=webstudiocrm.settings.prod
     ```
