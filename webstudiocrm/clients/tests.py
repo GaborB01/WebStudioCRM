@@ -99,3 +99,39 @@ class ContactInlineFormSetTests(TestCase):
         formset = self.build_formset(client, first_primary=True, second_primary=False)
 
         self.assertTrue(formset.is_valid())
+
+
+class ClientVatTests(TestCase):
+    def make(self, country, eu_vat_number=""):
+        return Client(name="Acme", country=country, eu_vat_number=eu_vat_number)
+
+    def test_vat_treatment_by_country_and_vat_number(self):
+        from core.choices import VatTreatment
+
+        self.assertEqual(self.make("HU").vat_treatment, VatTreatment.STANDARD)
+        self.assertEqual(self.make("DE", "DE123456789").vat_treatment, VatTreatment.EU_REVERSE_CHARGE)
+        # EU client without a VAT number pays Hungarian VAT
+        self.assertEqual(self.make("DE").vat_treatment, VatTreatment.STANDARD)
+        self.assertEqual(self.make("US").vat_treatment, VatTreatment.OUTSIDE_EU)
+
+    def test_new_client_defaults_to_hungary(self):
+        self.assertEqual(Client.objects.create(name="Acme").country.code, "HU")
+
+    def test_eu_vat_number_is_normalised(self):
+        client = self.make("DE", " de 123 456 789 ")
+        client.full_clean()
+
+        self.assertEqual(client.eu_vat_number, "DE123456789")
+
+    def test_eu_vat_number_must_match_country(self):
+        with self.assertRaises(ValidationError) as ctx:
+            self.make("DE", "FR12345678901").full_clean()
+
+        self.assertIn("eu_vat_number", ctx.exception.message_dict)
+
+    def test_greece_uses_el_prefix(self):
+        self.make("GR", "EL123456789").full_clean()
+
+    def test_non_eu_client_cannot_have_eu_vat_number(self):
+        with self.assertRaises(ValidationError):
+            self.make("US", "US123456").full_clean()
