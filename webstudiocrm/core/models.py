@@ -5,7 +5,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
-from .choices import Currency, DocumentLanguage
+from .choices import Currency, DocumentLanguage, VatTreatment
 
 
 class StudioProfile(models.Model):
@@ -123,10 +123,15 @@ class VatRate(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("100"))],
     )
-    is_reverse_charge = models.BooleanField(
-        "EU Reverse Charge",
-        default=False,
-        help_text="The client accounts for the VAT; the client's EU VAT number is required.",
+    treatment = models.CharField(
+        "VAT Treatment",
+        max_length=20,
+        choices=VatTreatment,
+        default=VatTreatment.STANDARD,
+        help_text=(
+            "Which clients this rate is for. EU reverse charge: the client "
+            "accounts for the VAT and needs an EU VAT number."
+        ),
     )
     note_en = models.TextField("Document Note (English)", blank=True)
     note_hu = models.TextField("Document Note (Hungarian)", blank=True)
@@ -149,21 +154,35 @@ class VatRate(models.Model):
     def __str__(self):
         return f"{self.name} ({self.rate.normalize():f}%)"
 
+    @property
+    def is_reverse_charge(self):
+        return self.treatment == VatTreatment.EU_REVERSE_CHARGE
+
     def clean(self):
         super().clean()
         errors = {}
-        if self.is_reverse_charge and self.rate:
-            errors["rate"] = "A reverse charge rate must be 0%."
-        if self.is_reverse_charge and not (self.note_en and self.note_hu):
-            errors["note_en"] = "Reverse charge needs a document note in both languages."
+        if self.treatment != VatTreatment.STANDARD:
+            if self.rate:
+                errors["rate"] = "Only Hungarian VAT rates can be above 0%."
+            if not (self.note_en and self.note_hu):
+                errors["note_en"] = "A 0% rate needs a document note in both languages."
         if self.is_default and not self.is_active:
             errors["is_default"] = "The default VAT rate must be active."
+        if self.is_default and self.treatment != VatTreatment.STANDARD:
+            errors["is_default"] = "The default VAT rate must be a Hungarian VAT rate."
         if errors:
             raise ValidationError(errors)
 
     @classmethod
     def get_default(cls):
         return cls.objects.filter(is_default=True, is_active=True).first()
+
+    @classmethod
+    def suggested_for(cls, treatment):
+        """The rate a new line gets for a client with this VAT treatment."""
+        if treatment == VatTreatment.STANDARD:
+            return cls.get_default()
+        return cls.objects.filter(treatment=treatment, is_active=True).first() or cls.get_default()
 
 
 class DocumentSequence(models.Model):
