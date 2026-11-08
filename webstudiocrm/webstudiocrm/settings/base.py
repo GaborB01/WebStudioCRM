@@ -12,11 +12,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # third party
+    "django_countries",
     # apps
     "core",
     "clients",
     "projects",
     "tasks",
+    "quotes",
 ]
 
 MIDDLEWARE = [
