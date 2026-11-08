@@ -5,9 +5,11 @@
 - [x] Client contact persons management
 - [x] Project module
 - [x] Task module
+- [x] Core module (studio profile, VAT rates, document numbering)
+- [x] Quoting module
 
 ### Phase 4: Quoting & Document Management
-- [ ] **Dedicated Quoting Module**: Detailed line-item quotes (quantity, rate, total) tied to Projects.
+- [x] **Dedicated Quoting Module**: Detailed line-item quotes (quantity, rate, total) tied to Projects.
 - [ ] **Contract & Document Storage**: `Contract` model for PDFs (NDAs, Development Agreements, SLAs) with signed dates and status tracking.
 
 ### Phase 5: Communication Sync & Monitoring
