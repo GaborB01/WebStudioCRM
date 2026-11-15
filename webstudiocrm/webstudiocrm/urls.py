@@ -17,12 +17,19 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Stands in for the storage provider's endpoint. Uploads are not served
+    # from disk: every read needs a presigned URL from the storage backend.
+    path('cloud/', include('cloudstorage.urls')),
+    # Signature provider callbacks; authenticated by the provider's own
+    # scheme, not by a session (see documents.views).
+    path('webhooks/', include('documents.urls')),
 ]
 
 if settings.DEBUG:
-    # In production the web server serves uploaded files, not Django
+    # Legacy local uploads only (see MEDIA_ROOT in settings); new files live
+    # in the bucket and are reached through /cloud/.
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
