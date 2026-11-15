@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import Project
 from clients.admin import ClientFilteredAutocompleteMedia, ClientFilteredAutocompleteMixin
+from documents.admin import ProjectDocumentInline
 from quotes.admin import QuoteInline
 from tasks.admin import TaskInline
 
@@ -24,7 +25,7 @@ class ProjectAdmin(ClientFilteredAutocompleteMixin, admin.ModelAdmin):
     )
     search_fields = ("name", "client__name", "description")
     autocomplete_fields = ["client", "primary_contact"]
-    inlines = [QuoteInline, TaskInline]
+    inlines = [QuoteInline, ProjectDocumentInline, TaskInline]
     readonly_fields = ("price_quote",)
     change_form_template = "admin/projects/project/change_form.html"
     Media = ClientFilteredAutocompleteMedia
