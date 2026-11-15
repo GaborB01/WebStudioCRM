@@ -4,7 +4,7 @@
   {% with q=quote_obj %}
   {% if q %}
     <li><a href="{% url 'admin:quotes_quote_preview' q.pk %}" target="_blank">Preview PDF</a></li>
-    {% if q.pdf %}<li><a href="{% url 'admin:quotes_quote_pdf' q.pk %}">Download PDF</a></li>{% endif %}
+    {% if q.pdf %}<li><a href="{% url 'admin:quotes_quote_pdf' q.pk %}" target="_blank" rel="noopener">Download PDF</a></li>{% endif %}
   {% endif %}
   {% endwith %}
   {{ block.super }}
@@ -13,6 +13,8 @@
 {% block form_top %}
   {% with q=quote_obj %}
   {% if q %}
+  {# Endpoint quote_line_defaults.js asks for a service's values #}
+  <div id="quote-line-defaults" data-url="{% url 'admin:quotes_quote_service_defaults' q.pk %}"></div>
   <div class="module" style="padding: 10px 12px; margin-bottom: 16px;">
     <strong>Status: {{ q.get_status_display }}</strong>
     {% if q.status == "draft" %}
