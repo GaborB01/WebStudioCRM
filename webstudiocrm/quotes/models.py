@@ -305,24 +305,22 @@ class QuoteLineItem(models.Model):
         return self.description.splitlines()[0] if self.description else "Line item"
 
     def fill_defaults(self):
-        """Fill empty fields from the service item and the client's VAT rate."""
-        quote = self.quote
-        service = self.service_item
-        if service:
-            if not self.description:
-                self.description = "\n".join(
-                    filter(None, [service.name_in(quote.language), service.description_in(quote.language)])
-                )
-            if self.unit_price is None:
-                self.unit_price = service.price_for(quote.currency)
-            self.unit = self.unit or service.unit
-            self.billing_type = self.billing_type or service.billing_type
-            if self.vat_rate_id is None and service.vat_rate_id:
-                self.vat_rate = service.vat_rate
-        self.unit = self.unit or Unit.PIECE
-        self.billing_type = self.billing_type or BillingType.ONE_OFF
+        """Fill empty fields from the service item and the client's VAT rate.
+
+        Only empty fields are filled, so anything typed on the line wins over
+        the service's values.
+        """
+        from .services.line_defaults import service_defaults
+
+        defaults = service_defaults(self.quote, self.service_item)
+        if not self.description:
+            self.description = defaults["description"]
+        if self.unit_price is None:
+            self.unit_price = defaults["unit_price"]
+        self.unit = self.unit or defaults["unit"]
+        self.billing_type = self.billing_type or defaults["billing_type"]
         if self.vat_rate_id is None:
-            self.vat_rate = VatRate.suggested_for(quote.client.vat_treatment)
+            self.vat_rate = defaults["vat_rate"]
 
     def clean(self):
         super().clean()
