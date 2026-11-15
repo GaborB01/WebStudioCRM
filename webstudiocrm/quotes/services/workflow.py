@@ -226,14 +226,41 @@ class QuoteService:
             project.status = "contracting"
         project.save()
 
+        contract = cls._start_contract(quote, project)
         Task.objects.create(
-            title=f"Prepare contract for quote {quote.number}",
+            title=(
+                f"Prepare {contract.document_type.name} for quote {quote.number}"
+                if contract
+                else f"Prepare contract for quote {quote.number}"
+            ),
             project=project,
             client=project.client,
             priority=Task.Priority.HIGH,
             due_date=timezone.localdate() + timedelta(days=3),
         )
         return quote
+
+    @staticmethod
+    def _start_contract(quote, project):
+        """Open a draft agreement for the accepted quote, if a document type
+        is marked for it (Documents -> Document Types). Returns None when the
+        studio has turned that off."""
+        from documents.models import DocumentType
+        from documents.services.workflow import DocumentService
+
+        document_type = DocumentType.for_accepted_quotes()
+        if document_type is None:
+            return None
+        return DocumentService.create_for_client(
+            project.client,
+            document_type,
+            user=quote.created_by,
+            project=project,
+            source_quote=quote,
+            language=quote.language,
+            title=f"{document_type.name} - {project.name}",
+            summary=f"Raised from accepted quote {quote.number}.",
+        )
 
     @classmethod
     @transaction.atomic
