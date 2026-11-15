@@ -1,15 +1,17 @@
-import tempfile
+import base64
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import Client, Contact
+from cloudstorage.testing import temp_bucket
 from core.models import DocumentSequence, StudioBankAccount, StudioProfile, VatRate
 from projects.models import Project
 from tasks.models import Task
@@ -17,10 +19,12 @@ from tasks.models import Task
 from .models import Quote, QuoteLineItem, ServiceItem, ServiceItemPrice
 from .services import calculator
 from .services.document_text import format_date, format_money
+from .services.pdf import logo_data_uri
 from .services.workflow import QuoteError, QuoteService
 
 D = Decimal
-MEDIA = tempfile.mkdtemp()
+# Quote PDFs are written to object storage; keep tests out of the real bucket.
+BUCKET = temp_bucket()
 
 
 class CalculatorTests(SimpleTestCase):
@@ -192,7 +196,7 @@ class QuoteDefaultsTests(QuoteFixtureMixin, TestCase):
             QuoteService.create_for_project(self.project, contact=stranger)
 
 
-@override_settings(MEDIA_ROOT=MEDIA)
+@override_settings(CLOUD_STORAGE=BUCKET)
 class QuoteWorkflowTests(QuoteFixtureMixin, TestCase):
     def test_send_numbers_freezes_and_renders(self):
         quote = QuoteService.send(self.make_quote())
@@ -268,7 +272,11 @@ class QuoteWorkflowTests(QuoteFixtureMixin, TestCase):
         self.assertEqual(self.project.price_display, f"150,000.00 HUF ({quote.number})")
         quote.follow_up_task.refresh_from_db()
         self.assertEqual(quote.follow_up_task.status, "done")
-        self.assertTrue(Task.objects.filter(title__startswith="Prepare contract").exists())
+        # Accepting opens the draft agreement and points the task at it
+        self.assertTrue(
+            Task.objects.filter(title="Prepare Development Agreement for quote "
+                                      f"{quote.number}").exists()
+        )
 
     def test_reject_closes_follow_up(self):
         quote = QuoteService.send(self.make_quote())
@@ -321,7 +329,7 @@ class QuoteWorkflowTests(QuoteFixtureMixin, TestCase):
         self.assertEqual(quote.items.get().vat_percent, D("27.00"))
 
 
-@override_settings(MEDIA_ROOT=MEDIA)
+@override_settings(CLOUD_STORAGE=BUCKET)
 class QuoteAdminTests(QuoteFixtureMixin, TestCase):
     def setUp(self):
         super().setUp()
@@ -441,9 +449,161 @@ class QuoteAdminTests(QuoteFixtureMixin, TestCase):
                 "quotes-TOTAL_FORMS": "1", "quotes-INITIAL_FORMS": "1",
                 "quotes-0-id": quote.pk, "quotes-0-project": self.project.pk,
                 "tasks-TOTAL_FORMS": "0", "tasks-INITIAL_FORMS": "0",
+                "documents-TOTAL_FORMS": "0", "documents-INITIAL_FORMS": "0",
             },
         )
 
         self.project.refresh_from_db()
         self.assertEqual(self.project.price, D("200000"))
         self.assertIsNone(self.project.price_quote)
+
+
+@override_settings(CLOUD_STORAGE=BUCKET)
+class LogoFromObjectStorageTests(QuoteFixtureMixin, TestCase):
+    """The studio logo lives in the bucket, which has no filesystem path, so
+    the renderer must read it through the storage API."""
+
+    # 1x1 transparent PNG
+    PNG = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+        "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.profile.logo.save("logo.png", ContentFile(self.PNG), save=True)
+
+    def test_snapshot_stores_the_storage_key_not_a_local_path(self):
+        quote = QuoteService.send(self.make_quote())
+
+        self.assertEqual(quote.seller_snapshot["logo_name"], self.profile.logo.name)
+        self.assertNotIn("logo_path", quote.seller_snapshot)
+
+    def test_renderer_inlines_the_logo_as_a_data_uri(self):
+        quote = QuoteService.send(self.make_quote())
+
+        uri = logo_data_uri(quote.seller_snapshot)
+
+        self.assertTrue(uri.startswith("data:image/png;base64,"))
+        self.assertEqual(base64.b64decode(uri.split(",", 1)[1]), self.PNG)
+
+    def test_a_missing_logo_object_does_not_break_rendering(self):
+        quote = QuoteService.send(self.make_quote())
+        self.profile.logo.delete(save=True)  # writes a delete marker
+
+        self.assertEqual(logo_data_uri(quote.seller_snapshot), "")
+
+
+@override_settings(CLOUD_STORAGE=BUCKET)
+class ServiceDefaultsEndpointTests(QuoteFixtureMixin, TestCase):
+    """The inline previews the same values the save would apply."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(User.objects.create_superuser("admin", "a@a.hu", "pw"))
+        self.quote = QuoteService.create_for_project(self.project)
+
+    def get(self, service, quote=None):
+        url = reverse(
+            "admin:quotes_quote_service_defaults", args=[(quote or self.quote).pk]
+        )
+        return self.client.get(url, {"service": service.pk if service else ""})
+
+    def test_returns_the_values_fill_defaults_would_apply(self):
+        data = self.get(self.design).json()
+
+        self.assertEqual(data["description"], "Arculat- és UI tervezés")
+        self.assertEqual(data["unit_price"], "15000.00")
+        self.assertEqual(data["unit"], "hour")
+        self.assertEqual(data["billing_type"], "one_off")
+        self.assertEqual(data["vat_rate"], str(self.standard.pk))
+        self.assertFalse(data["missing_price"])
+
+    def test_matches_what_the_saved_line_ends_up_with(self):
+        data = self.get(self.maintenance).json()
+        item = QuoteService.add_service_item(self.quote, self.maintenance)
+
+        self.assertEqual(data["description"], item.description)
+        self.assertEqual(data["unit_price"], f"{item.unit_price:.2f}")
+        self.assertEqual(data["unit"], item.unit)
+        self.assertEqual(data["billing_type"], item.billing_type)
+        self.assertEqual(data["vat_rate"], str(item.vat_rate_id))
+
+    def test_follows_the_quote_language_and_currency(self):
+        self.quote.language = "en"
+        self.quote.currency = "EUR"
+        self.quote.save()
+
+        data = self.get(self.design).json()
+
+        self.assertEqual(data["description"], "UI design")
+        self.assertEqual(data["unit_price"], "40.00")
+        self.assertEqual(data["currency"], "EUR")
+
+    def test_flags_a_service_with_no_price_in_this_currency(self):
+        self.quote.currency = "EUR"
+        self.quote.save()
+
+        data = self.get(self.maintenance).json()  # HUF price only
+
+        self.assertEqual(data["unit_price"], "")
+        self.assertTrue(data["missing_price"])
+
+    def test_suggests_the_reverse_charge_rate_for_an_eu_client(self):
+        # vat_treatment is derived from the country and EU VAT number
+        eu_client = Client.objects.create(
+            name="Berlin GmbH", country="DE", eu_vat_number="DE123456789"
+        )
+        quote = QuoteService.create_for_project(
+            Project.objects.create(client=eu_client, name="Site", project_type="website")
+        )
+
+        data = self.get(self.design, quote=quote).json()
+
+        self.assertEqual(data["vat_rate"], str(self.reverse_charge.pk))
+
+    def test_an_unknown_service_falls_back_to_the_client_defaults(self):
+        data = self.get(None).json()
+
+        self.assertEqual(data["description"], "")
+        self.assertEqual(data["unit_price"], "")
+        self.assertEqual(data["unit"], "piece")
+        self.assertEqual(data["vat_rate"], str(self.standard.pk))
+
+    def test_requires_a_logged_in_staff_user(self):
+        self.client.logout()
+        response = self.get(self.design)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("login", response["Location"])
+
+    def test_change_form_loads_the_script_and_endpoint(self):
+        response = self.client.get(
+            reverse("admin:quotes_quote_change", args=[self.quote.pk])
+        )
+        self.assertContains(response, "quotes/js/quote_line_defaults.js")
+        self.assertContains(
+            response,
+            reverse("admin:quotes_quote_service_defaults", args=[self.quote.pk]),
+        )
+
+
+@override_settings(CLOUD_STORAGE=BUCKET)
+class MissingPdfTests(QuoteFixtureMixin, TestCase):
+    """A sent quote whose PDF bytes are gone from storage (file predates the
+    bucket, or the bucket directory was lost) must explain, not crash."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(User.objects.create_superuser("admin", "a@a.hu", "pw"))
+
+    def test_download_explains_instead_of_crashing(self):
+        quote = QuoteService.send(self.make_quote())
+        quote.pdf.storage.delete(quote.pdf.name)  # bytes unreachable, field still set
+
+        response = self.client.get(
+            reverse("admin:quotes_quote_pdf", args=[quote.pk]), follow=True
+        )
+
+        self.assertEqual(response.status_code, 200)  # back on the quote page
+        self.assertContains(response, "missing from file storage")
+        self.assertContains(response, "import_media_to_cloud")
