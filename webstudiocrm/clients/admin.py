@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.forms.models import BaseInlineFormSet
+
+from documents.admin import ClientDocumentInline
+
 from .models import Client, Contact
 
 
@@ -65,7 +68,7 @@ class ClientAdmin(admin.ModelAdmin):
         "website",
         "notes",
     )
-    inlines = [ContactInline]
+    inlines = [ContactInline, ClientDocumentInline]
 
 
 @admin.register(Contact)
