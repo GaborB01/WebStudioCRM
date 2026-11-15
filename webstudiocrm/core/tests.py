@@ -169,6 +169,8 @@ class StudioProfileAdminTests(TestCase):
                 "default_language": "en",
                 "default_payment_terms_days": 15,
                 "default_quote_validity_days": 30,
+                "signatories-TOTAL_FORMS": 0,
+                "signatories-INITIAL_FORMS": 0,
                 "bank_accounts-TOTAL_FORMS": 1,
                 "bank_accounts-INITIAL_FORMS": 0,
                 "bank_accounts-0-currency": "EUR",
