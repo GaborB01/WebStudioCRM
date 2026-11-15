@@ -1,0 +1,62 @@
+{% extends "admin/change_form.html" %}
+
+{% block form_top %}
+  {% with d=document_obj %}
+  {% if d %}
+    {# Endpoint signer_defaults.js asks for a contact's details #}
+    <div id="signer-defaults" data-url="{% url 'admin:documents_document_contact_details' d.pk %}"></div>
+
+    <div class="module" style="padding: 10px 12px; margin-bottom: 16px;">
+      <strong>Status: {{ d.get_status_display }}</strong>
+      {% if d.signers.exists %}
+        &mdash; {{ d.signing_progress.0 }} of {{ d.signing_progress.1 }} signed
+      {% endif %}
+      {% if d.expiry_date %}&mdash; expires {{ d.expiry_date }}{% endif %}
+
+      {% if d.is_editable %}
+        {% if send_problems %}
+          <ul class="errorlist" style="margin-top: 6px;">
+            {% for problem in send_problems %}<li>{{ problem }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        <p class="help" style="margin: 6px 0;">Save your changes first; the buttons act on the saved document.</p>
+        <button type="submit" form="document-send" class="button default" {% if send_problems %}disabled{% endif %}>Send for signature</button>
+        <button type="submit" form="document-mark-signed" class="button">Record signature (wet ink)</button>
+      {% elif d.status == "out_for_signature" or d.status == "partially_signed" %}
+        <p class="help" style="margin: 6px 0;">Mark individual signatures on the signer rows, or record the whole thing at once.</p>
+        <button type="submit" form="document-mark-signed" class="button default">Record signature (wet ink)</button>
+      {% elif d.status == "signed" or d.status == "active" %}
+        {% if d.auto_renews %}<button type="submit" form="document-renew" class="button">Renew for a new term</button>{% endif %}
+        <button type="submit" form="document-terminate" class="button">Terminate</button>
+        <button type="submit" form="document-amend" class="button">Create amendment</button>
+      {% elif d.status == "expired" or d.status == "declined" or d.status == "terminated" %}
+        <button type="submit" form="document-amend" class="button">Create amendment</button>
+      {% endif %}
+    </div>
+  {% endif %}
+  {% endwith %}
+  {{ block.super }}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+  {% if document_obj %}
+    {# Separate forms (outside the main form) so buttons don't submit the edit form #}
+    <form id="document-send" method="post" action="{% url 'admin:documents_document_workflow' document_obj.pk 'send' %}">{% csrf_token %}</form>
+
+    <form id="document-mark-signed" method="post" enctype="multipart/form-data"
+          action="{% url 'admin:documents_document_workflow' document_obj.pk 'mark_signed' %}"
+          onsubmit="var d = prompt('Signed on (YYYY-MM-DD, blank = today):', ''); if (d === null) return false; this.signed_date.value = d;">
+      {% csrf_token %}<input type="hidden" name="signed_date">
+    </form>
+
+    <form id="document-terminate" method="post"
+          action="{% url 'admin:documents_document_workflow' document_obj.pk 'terminate' %}"
+          onsubmit="var r = prompt('Reason for terminating:', ''); if (r === null) return false; this.reason.value = r;">
+      {% csrf_token %}<input type="hidden" name="reason">
+    </form>
+
+    <form id="document-renew" method="post" action="{% url 'admin:documents_document_workflow' document_obj.pk 'renew' %}">{% csrf_token %}</form>
+    <form id="document-amend" method="post" action="{% url 'admin:documents_document_workflow' document_obj.pk 'amend' %}">{% csrf_token %}</form>
+  {% endif %}
+{% endblock %}
