@@ -1,8 +1,11 @@
 """Renders a quote to PDF with WeasyPrint (HTML template -> PDF)."""
 
+import base64
+import mimetypes
 from pathlib import Path
 
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.template.loader import render_to_string
 
 from core.models import StudioProfile
@@ -10,6 +13,29 @@ from core.models import StudioProfile
 from . import calculator
 from .document_text import LABELS, format_date, format_money, format_number, format_quantity
 from .snapshots import client_snapshot, seller_snapshot
+
+
+def logo_data_uri(seller):
+    """Embed the studio logo in the HTML as a data URI.
+
+    The logo lives in object storage, which has no filesystem path for
+    WeasyPrint to follow, so the bytes are inlined instead.
+    """
+    name = seller.get("logo_name")
+    if name:
+        try:
+            with default_storage.open(name, "rb") as handle:
+                data = handle.read()
+        except (FileNotFoundError, OSError):
+            return ""
+        mime_type = mimetypes.guess_type(name)[0] or "image/png"
+        return f"data:{mime_type};base64,{base64.b64encode(data).decode('ascii')}"
+
+    # Snapshots taken before the move to object storage kept a local path.
+    legacy_path = seller.get("logo_path")
+    if legacy_path and Path(legacy_path).is_file():
+        return Path(legacy_path).as_uri()
+    return ""
 
 
 class QuotePDFRenderer:
@@ -103,7 +129,7 @@ class QuotePDFRenderer:
             "is_draft": quote.is_editable,
             "seller": seller,
             "client": client,
-            "logo_uri": Path(seller["logo_path"]).as_uri() if seller.get("logo_path") else "",
+            "logo_uri": logo_data_uri(seller),
             "issue_date": format_date(quote.issue_date, language),
             "valid_until": format_date(quote.valid_until, language),
             "rows": rows,
