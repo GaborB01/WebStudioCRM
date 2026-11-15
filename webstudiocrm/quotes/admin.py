@@ -1,11 +1,12 @@
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.http import FileResponse, HttpResponse, HttpResponseNotAllowed
+from django.http import FileResponse, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
 
 from .models import Quote, QuoteLineItem, ServiceItem, ServiceItemPrice
+from .services.line_defaults import service_defaults
 from .services.pdf import QuotePDFRenderer
 from .services.workflow import QuoteError, QuoteService
 
@@ -79,6 +80,12 @@ class QuoteLineItemInline(admin.TabularInline):
 @admin.register(Quote)
 class QuoteAdmin(admin.ModelAdmin):
     change_form_template = "admin/quotes/quote/change_form.html"
+
+    class Media:
+        # Fills a line's description, price, unit, billing and VAT as soon as
+        # a service is chosen, instead of waiting for the save.
+        js = ("admin/js/jquery.init.js", "quotes/js/quote_line_defaults.js")
+
     list_display = (
         "reference",
         "project",
@@ -144,7 +151,11 @@ class QuoteAdmin(admin.ModelAdmin):
         if not obj.pdf:
             return "-"
         url = reverse("admin:quotes_quote_pdf", args=[obj.pk])
-        return format_html('<a href="{}">{}</a>', url, obj.pdf.name.rsplit("/", 1)[-1])
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">{}</a>',
+            url,
+            obj.pdf.name.rsplit("/", 1)[-1],
+        )
 
     def get_fieldsets(self, request, obj=None):
         if obj is None:
@@ -214,6 +225,11 @@ class QuoteAdmin(admin.ModelAdmin):
             ),
             path("<int:pk>/pdf/", self.admin_site.admin_view(self.pdf_view), name="quotes_quote_pdf"),
             path(
+                "<int:pk>/service-defaults/",
+                self.admin_site.admin_view(self.service_defaults_view),
+                name="quotes_quote_service_defaults",
+            ),
+            path(
                 "<int:pk>/preview/",
                 self.admin_site.admin_view(self.preview_view),
                 name="quotes_quote_preview",
@@ -255,11 +271,57 @@ class QuoteAdmin(admin.ModelAdmin):
         messages.success(request, done[step])
         return redirect(reverse("admin:quotes_quote_change", args=[result.pk]))
 
+    def service_defaults_view(self, request, pk):
+        """The values a line would take from a service, for the inline to show
+        as soon as the service is picked (quote_line_defaults.js).
+
+        Returns exactly what QuoteLineItem.fill_defaults() would apply on save.
+        """
+        quote = self._get_quote(request, pk)
+        if not self.has_change_permission(request, quote):
+            raise PermissionDenied
+
+        service_id = request.GET.get("service", "")
+        service = (
+            ServiceItem.objects.filter(pk=service_id, is_active=True).first()
+            if service_id.isdigit()
+            else None
+        )
+        defaults = service_defaults(quote, service)
+        unit_price = defaults["unit_price"]
+        vat_rate = defaults["vat_rate"]
+        return JsonResponse(
+            {
+                "description": defaults["description"],
+                "unit": defaults["unit"],
+                "unit_price": "" if unit_price is None else f"{unit_price:.2f}",
+                "billing_type": defaults["billing_type"],
+                "vat_rate": "" if vat_rate is None else str(vat_rate.pk),
+                "currency": quote.currency,
+                # The service has no price in this quote's currency; the same
+                # case QuoteLineItem.clean() rejects on save.
+                "missing_price": bool(service and unit_price is None),
+            }
+        )
+
     def pdf_view(self, request, pk):
         quote = self._get_quote(request, pk)
         if not quote.pdf:
             raise PermissionDenied
-        return FileResponse(quote.pdf.open("rb"), content_type="application/pdf",
+        try:
+            handle = quote.pdf.open("rb")
+        except FileNotFoundError:
+            # The file is gone from storage (e.g. it predates the move to the
+            # bucket, or the bucket directory was deleted) - explain instead
+            # of crashing. Preview still works: it re-renders from the data.
+            messages.error(
+                request,
+                f"The stored PDF ({quote.pdf.name}) is missing from file storage. "
+                "Run `manage.py import_media_to_cloud` to bring legacy files into "
+                "the bucket, or use Preview PDF to re-render it from the quote.",
+            )
+            return redirect(reverse("admin:quotes_quote_change", args=[quote.pk]))
+        return FileResponse(handle, content_type="application/pdf",
                             filename=quote.pdf.name.rsplit("/", 1)[-1])
 
     def preview_view(self, request, pk):
