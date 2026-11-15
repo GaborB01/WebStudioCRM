@@ -109,6 +109,56 @@ class StudioBankAccount(models.Model):
         return f"{self.bank_name} ({self.currency})"
 
 
+class StudioSignatory(models.Model):
+    """A person who signs documents on the studio's behalf.
+
+    The counterpart of a client contact for the studio's own side: documents
+    that the studio countersigns add the default signatory automatically.
+    """
+
+    profile = models.ForeignKey(
+        StudioProfile,
+        on_delete=models.CASCADE,
+        related_name="signatories",
+        verbose_name="Studio Profile",
+    )
+    name = models.CharField("Name", max_length=255)
+    role = models.CharField(
+        "Role / Position", max_length=100, blank=True, help_text="E.g. Managing Director."
+    )
+    email = models.EmailField("Email Address")
+    is_default = models.BooleanField(
+        "Default",
+        default=False,
+        help_text="Added automatically to documents the studio countersigns.",
+    )
+
+    class Meta:
+        verbose_name = "Studio Signatory"
+        verbose_name_plural = "Studio Signatories"
+        ordering = ["-is_default", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_default"],
+                condition=models.Q(is_default=True),
+                name="single_default_studio_signatory",
+                violation_error_message="Another signatory is already the default.",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.role})" if self.role else self.name
+
+    @classmethod
+    def get_default(cls):
+        """The marked default; with no mark, a sole signatory counts as one."""
+        marked = cls.objects.filter(is_default=True).first()
+        if marked:
+            return marked
+        signatories = list(cls.objects.all()[:2])
+        return signatories[0] if len(signatories) == 1 else None
+
+
 class VatRate(models.Model):
     """A VAT rate that can be applied to a document line.
 
