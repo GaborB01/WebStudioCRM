@@ -2,7 +2,13 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from django.urls import reverse
 
-from .models import DocumentSequence, StudioBankAccount, StudioProfile, VatRate
+from .models import (
+    DocumentSequence,
+    StudioBankAccount,
+    StudioProfile,
+    StudioSignatory,
+    VatRate,
+)
 
 
 class SingletonModelAdmin(admin.ModelAdmin):
@@ -31,9 +37,14 @@ class StudioBankAccountInline(admin.TabularInline):
     extra = 1
 
 
+class StudioSignatoryInline(admin.TabularInline):
+    model = StudioSignatory
+    extra = 1
+
+
 @admin.register(StudioProfile)
 class StudioProfileAdmin(SingletonModelAdmin):
-    inlines = [StudioBankAccountInline]
+    inlines = [StudioSignatoryInline, StudioBankAccountInline]
 
     fieldsets = (
         (
