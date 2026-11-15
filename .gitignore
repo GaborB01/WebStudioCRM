@@ -65,6 +65,9 @@ db.sqlite3-journal
 # Uploaded files
 webstudiocrm/media/
 
+# Local stand-in for the object storage bucket
+webstudiocrm/cloud-bucket/
+
 # Flask stuff:
 instance/
 .webassets-cache
