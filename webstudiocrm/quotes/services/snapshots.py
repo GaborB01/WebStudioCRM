@@ -31,7 +31,9 @@ def seller_snapshot(profile, currency):
         "email": profile.email,
         "phone": profile.phone,
         "website": profile.website,
-        "logo_path": profile.logo.path if profile.logo else "",
+        # The storage key, not a filesystem path: objects in the bucket have
+        # no local path. The PDF renderer reads the bytes through storage.
+        "logo_name": profile.logo.name if profile.logo else "",
         "bank": {
             "bank_name": bank.bank_name,
             "account_number": bank.account_number,
