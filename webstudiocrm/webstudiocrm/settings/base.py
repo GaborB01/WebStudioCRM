@@ -7,7 +7,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # django.contrib.admin with the CRM's own site (menu, dashboard)
+    "webstudiocrm.apps.CRMAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -23,6 +24,7 @@ INSTALLED_APPS = [
     "tasks",
     "quotes",
     "documents",
+    "communications",
 ]
 
 MIDDLEWARE = [
@@ -40,7 +42,8 @@ ROOT_URLCONF = "webstudiocrm.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Project-wide overrides (the admin home page) live here
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -124,3 +127,106 @@ CLOUD_STORAGE = {
 # `manage.py import_media_to_cloud`.
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR.parent / "media"
+
+# Logging
+#
+# Everything goes to stderr, where the process manager (systemd, Docker, a
+# PaaS) collects it; nothing is written to files inside the project.
+# Third-party libraries only report warnings (WeasyPrint's font subsetting
+# is chatty at INFO); this project's apps log at INFO, so webhook
+# rejections and scheduled-command summaries are visible.
+PROJECT_APPS = [
+    "cloudstorage", "core", "clients", "projects", "tasks", "quotes", "documents",
+    "communications",
+]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "plain": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "plain"},
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {app: {"level": "INFO"} for app in PROJECT_APPS},
+}
+
+# Background jobs (Celery)
+#
+# The broker is Redis. Without CELERY_BROKER_URL in the environment,
+# tasks run inline in the calling process (ALWAYS_EAGER): that is how
+# development and the tests work, with no Redis to install. Production
+# requires the broker (settings/prod.py) and a worker:
+#     celery -A webstudiocrm worker --loglevel=info
+CELERY_TASK_ALWAYS_EAGER = not os.environ.get("CELERY_BROKER_URL")
+# The in-memory transport when running inline: nothing to connect to
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL") or "memory://localhost/"
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_BACKEND = None
+# Only acknowledge a job once it finished, so a worker crash re-runs it
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Mail intake
+#
+# SOURCE picks where mail is read from:
+#   "folder" - a directory of .eml files with inbox/ and sent/ subfolders;
+#              the default, for development (no mailbox needed)
+#   "imap"   - a real mailbox; read-only, nothing is marked or moved
+# `python manage.py sync_mail` reads once; with a Celery worker and beat
+# running, SYNC_INTERVAL_SECONDS repeats it automatically.
+MAIL = {
+    "SOURCE": os.environ.get("MAIL_SOURCE", "folder"),
+    "SYNC_INTERVAL_SECONDS": int(os.environ.get("MAIL_SYNC_INTERVAL_SECONDS", "300")),
+    "FOLDER": {
+        "PATH": os.environ.get("MAIL_FOLDER", str(BASE_DIR.parent / "mail-inbox")),
+    },
+    "IMAP": {
+        "HOST": os.environ.get("IMAP_HOST", ""),
+        "PORT": int(os.environ.get("IMAP_PORT", "993")),
+        "SSL": os.environ.get("IMAP_SSL", "true").lower() in {"1", "true", "yes", "on"},
+        "USER": os.environ.get("IMAP_USER", ""),
+        "PASSWORD": os.environ.get("IMAP_PASSWORD", ""),
+        "FOLDERS": {
+            os.environ.get("IMAP_INBOX", "INBOX"): "in",
+            os.environ.get("IMAP_SENT", "Sent"): "out",
+        },
+        "BATCH": int(os.environ.get("IMAP_BATCH", "200")),
+        "TIMEOUT": 30,
+    },
+}
+
+MAIL["OUTBOX"] = {
+    "PATH": os.environ.get("MAIL_OUTBOX", str(BASE_DIR.parent / "mail-outbox")),
+}
+
+# Sending mail
+#
+# Development writes every sent email into MAIL["OUTBOX"]["PATH"] as an .eml
+# file instead of contacting a mail server (see communications.mail_backends).
+# Production sends over SMTP (settings/prod.py). The From address is the
+# Studio Profile's email; there is no separate DEFAULT_FROM_EMAIL to keep
+# in step.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "communications.mail_backends.OutboxFolderBackend"
+)
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
+EMAIL_TIMEOUT = 30
+
+# Run by `celery -A webstudiocrm beat` next to the worker
+CELERY_BEAT_SCHEDULE = {
+    "sync-mail": {
+        "task": "communications.tasks.sync_mail",
+        "schedule": MAIL["SYNC_INTERVAL_SECONDS"],
+    },
+}
