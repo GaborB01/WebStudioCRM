@@ -42,8 +42,8 @@ class StoredObject(models.Model):
     updated_at = models.DateTimeField("Last Changed", auto_now=True)
 
     class Meta:
-        verbose_name = "Stored Object"
-        verbose_name_plural = "Stored Objects"
+        verbose_name = "Stored File"
+        verbose_name_plural = "Stored Files"
         ordering = ["key"]
         constraints = [
             models.UniqueConstraint(fields=["bucket", "key"], name="unique_key_per_bucket")
@@ -137,8 +137,8 @@ class StoredObjectVersion(models.Model):
     uploaded_at = models.DateTimeField("Stored At", auto_now_add=True)
 
     class Meta:
-        verbose_name = "Object Version"
-        verbose_name_plural = "Object Versions"
+        verbose_name = "File Version"
+        verbose_name_plural = "File Versions"
         ordering = ["stored_object", "-version_number"]
         constraints = [
             models.UniqueConstraint(
