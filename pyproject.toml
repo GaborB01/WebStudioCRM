@@ -5,9 +5,12 @@ description = "A custom CRM built for my needs"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "celery[redis]>=5.4",
     "django>=6.0.4",
     "django-countries>=9.1.0",
+    "nh3>=0.2.17",
     "pillow>=13.0.0",
+    "psycopg[binary]>=3.2",
     "python-dotenv>=1.2.4",
     "weasyprint>=70.0",
 ]
