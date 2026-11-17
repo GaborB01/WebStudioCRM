@@ -11,6 +11,7 @@ from django.db.models import Count, Sum
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from webstudiocrm.admin_site import ListTitleMixin
 
 from .backends import ObjectNotFound
 from .models import StoredObject, StoredObjectVersion, format_bytes
@@ -99,7 +100,8 @@ class StoredObjectVersionInline(admin.TabularInline):
 
 
 @admin.register(StoredObject)
-class StoredObjectAdmin(admin.ModelAdmin):
+class StoredObjectAdmin(ListTitleMixin, admin.ModelAdmin):
+    list_title = "Stored files"
     list_display = (
         "key",
         "bucket",
@@ -231,7 +233,8 @@ class StoredObjectAdmin(admin.ModelAdmin):
 
 
 @admin.register(StoredObjectVersion)
-class StoredObjectVersionAdmin(admin.ModelAdmin):
+class StoredObjectVersionAdmin(ListTitleMixin, admin.ModelAdmin):
+    list_title = "File versions"
     """Every version in the bucket - the audit trail, and where restores happen."""
 
     list_display = (
