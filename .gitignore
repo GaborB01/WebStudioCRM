@@ -224,3 +224,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Development mail folder (stands in for a mailbox)
+webstudiocrm/mail-inbox/
+# Development outbox (sent mail is written here instead of to a server)
+webstudiocrm/mail-outbox/
